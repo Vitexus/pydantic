@@ -40,7 +40,7 @@ Package: python3-pydantic
 Architecture: any
 Depends: ${misc:Depends},
          ${python3:Depends},
-         python3-pydantic-core,
+         python3-pydantic-core (>= 2.46.0),
          python3-email-validator
 Breaks: python3-dirty-equals (<< 0.8~),
         python3-djantic (<< 0.7.0-5~),
