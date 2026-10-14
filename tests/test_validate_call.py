@@ -67,7 +67,7 @@ def test_func_type() -> None:
         validate_call([])
 
 
-def validate_bare_none() -> None:
+def test_validate_bare_none() -> None:
     @validate_call
     def func(f: None):
         return f
@@ -919,7 +919,7 @@ def test_use_of_alias():
 
 
 def test_validate_by_name():
-    @validate_call(config=dict(validate_by_name=True))
+    @validate_call(config={'validate_by_name': True})
     def foo(a: Annotated[int, Field(alias='b')], c: Annotated[int, Field(alias='d')]):
         return a + c
 
@@ -929,8 +929,18 @@ def test_validate_by_name():
     assert foo(a=10, c=1) == 11
 
 
+def test_populate_by_name() -> None:
+    """https://github.com/pydantic/pydantic/issues/13687"""
+
+    @validate_call(config={'populate_by_name': True})
+    def foo(a: Annotated[int, Field(alias='b')]):
+        return a
+
+    assert foo(a=1) == 1
+
+
 def test_validate_return():
-    @validate_call(config=dict(validate_return=True))
+    @validate_call(config={'validate_return': True})
     def foo(a: int, b: int) -> int:
         return a + b
 
@@ -938,7 +948,7 @@ def test_validate_return():
 
 
 def test_validate_all():
-    @validate_call(config=dict(validate_default=True))
+    @validate_call(config={'validate_default': True})
     def foo(dt: datetime = Field(default_factory=lambda: 946684800)):
         return dt
 
@@ -1123,42 +1133,6 @@ def test_validate_call_with_slots() -> None:
     assert c.some_instance_method == c.some_instance_method
     assert c.some_class_method == c.some_class_method
     assert c.some_static_method == c.some_static_method
-
-
-def test_eval_type_backport():
-    @validate_call
-    def foo(bar: 'list[int | str]') -> 'list[int | str]':
-        return bar
-
-    assert foo([1, '2']) == [1, '2']
-    with pytest.raises(ValidationError) as exc_info:
-        foo('not a list')  # type: ignore
-    # insert_assert(exc_info.value.errors(include_url=False))
-    assert exc_info.value.errors(include_url=False) == [
-        {
-            'type': 'list_type',
-            'loc': (0,),
-            'msg': 'Input should be a valid list',
-            'input': 'not a list',
-        }
-    ]
-    with pytest.raises(ValidationError) as exc_info:
-        foo([{'not a str or int'}])  # type: ignore
-    # insert_assert(exc_info.value.errors(include_url=False))
-    assert exc_info.value.errors(include_url=False) == [
-        {
-            'type': 'int_type',
-            'loc': (0, 0, 'int'),
-            'msg': 'Input should be a valid integer',
-            'input': {'not a str or int'},
-        },
-        {
-            'type': 'string_type',
-            'loc': (0, 0, 'str'),
-            'msg': 'Input should be a valid string',
-            'input': {'not a str or int'},
-        },
-    ]
 
 
 def test_eval_namespace_basic(create_module):
@@ -1365,3 +1339,13 @@ def test_pickle_validate_call_with_basemodel() -> None:
 
     assert unpickled == {1: _PickleTestModel(number=1.0)}
     assert unpickled[1].number == 1.0
+
+
+def test_validate_call_self_parameter() -> None:
+    """https://github.com/pydantic/pydantic/issues/13771"""
+
+    @validate_call
+    def func(self: int):
+        return self
+
+    assert func(self=1) == 1

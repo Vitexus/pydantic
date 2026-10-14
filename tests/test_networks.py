@@ -1,4 +1,5 @@
 import json
+import operator
 from typing import Annotated, Any
 
 import pytest
@@ -935,7 +936,9 @@ def test_json():
         ('xn--80ak6aa92e@example.com', 'xn--80ak6aa92e', 'xn--80ak6aa92e@example.com'),
         ('葉士豪@臺網中心.tw', '葉士豪', '葉士豪@臺網中心.tw'),
         ('"first.last" <first.last@example.com>', 'first.last', 'first.last@example.com'),
+        ('first.last <first.last@example.com>', 'first.last', 'first.last@example.com'),
         ("Shaquille O'Neal <shaq@example.com>", "Shaquille O'Neal", 'shaq@example.com'),
+        ('Homer J. Simpson <homer@thesimpsons.com>', 'Homer J. Simpson', 'homer@thesimpsons.com'),
     ],
 )
 def test_address_valid(value, name, email):
@@ -969,7 +972,6 @@ def test_address_valid(value, name, email):
         ('foobar <foobar@example.com>>', None),
         ('foobar <<foobar<@example.com>', None),
         ('foobar <>', None),
-        ('first.last <first.last@example.com>', None),
         pytest.param('foobar <' + 'a' * 4096 + '@example.com>', 'Length must not exceed 2048 characters', id='long'),
     ],
 )
@@ -1008,6 +1010,12 @@ def test_name_email():
 
     assert str(Model(v=NameEmail('foo bar', 'foobaR@example.com')).v) == 'foo bar <foobaR@example.com>'
     assert str(Model(v='foo bar  <foobaR@example.com>').v) == 'foo bar <foobaR@example.com>'
+    assert Model(v='Homer J. Simpson <homer@thesimpsons.com>').v == NameEmail(
+        'Homer J. Simpson', 'homer@thesimpsons.com'
+    )
+    assert TypeAdapter(NameEmail).validate_python('Homer J. Simpson <homer@thesimpsons.com>') == NameEmail(
+        'Homer J. Simpson', 'homer@thesimpsons.com'
+    )
     assert str(Model(v='foobaR@example.com').v) == 'foobaR <foobaR@example.com>'
     assert NameEmail('foo bar', 'foobaR@example.com') == NameEmail('foo bar', 'foobaR@example.com')
     assert NameEmail('foo bar', 'foobaR@example.com') != NameEmail('foo bar', 'different@example.com')
@@ -1025,6 +1033,29 @@ def test_name_email():
     assert exc_info.value.errors() == [
         {'input': 1, 'loc': ('v',), 'msg': 'Input is not a valid NameEmail', 'type': 'name_email_type'}
     ]
+
+
+@pytest.mark.skipif(not email_validator, reason='email_validator not installed')
+@pytest.mark.parametrize(
+    'value',
+    [
+        'John\r\n Doe <john@example.com>',
+        'John\r\nDoe <john@example.com>',
+        'John\nDoe <john@example.com>',
+        'John\rDoe <john@example.com>',
+        '"John\r\nDoe" <john@example.com>',
+        'John Doe <john@example.com>\r\n',
+    ],
+)
+def test_name_email_rejects_cr_lf(value: str) -> None:
+
+    ta = TypeAdapter(NameEmail)
+
+    with pytest.raises(ValidationError) as exc_info:
+        ta.validate_python(value)
+    assert exc_info.value.errors()[0]['msg'] == (
+        'value is not a valid email address: Carriage return and line feed characters are not allowed'
+    )
 
 
 @pytest.mark.skipif(not email_validator, reason='email_validator not installed')
@@ -1173,6 +1204,52 @@ def test_any_url_comparison() -> None:
     assert second_url > first_url
     assert first_url <= second_url
     assert second_url >= first_url
+
+
+@pytest.mark.parametrize('other', ['https://a.com', 5, None, HttpUrl('https://a.com')])
+def test_any_url_ordering_not_implemented(other: Any) -> None:
+    """Ordering against a different type is unsupported, rather than silently `False`."""
+    url = AnyUrl('https://a.com')
+
+    for op in (operator.lt, operator.gt, operator.le, operator.ge):
+        with pytest.raises(TypeError):
+            op(url, other)
+
+
+def test_any_url_ordering_is_consistent() -> None:
+    """`sorted()` on mixed URL types raises instead of returning a meaningless order."""
+    with pytest.raises(TypeError):
+        sorted([AnyUrl('https://z.com'), HttpUrl('https://b.com')])
+
+    # Equality against types with no cross-type `__eq__` of their own still compares unequal.
+    assert AnyUrl('https://a.com') != HttpUrl('https://a.com')
+    assert AnyUrl('https://a.com') != 'https://a.com'
+    assert AnyUrl('https://a.com') == AnyUrl('https://a.com')
+
+
+def test_any_url_equality_delegates_to_foreign_type() -> None:
+    class UrlWrapper:
+        def __init__(self, url: str) -> None:
+            self.url = url
+
+        def __eq__(self, other: object) -> bool:
+            if isinstance(other, (AnyUrl, PostgresDsn)):
+                return self.url == str(other)
+            return NotImplemented
+
+    # `_BaseUrl`: equality is symmetric regardless of operand order.
+    assert AnyUrl('https://a.com') == UrlWrapper('https://a.com/')
+    assert UrlWrapper('https://a.com/') == AnyUrl('https://a.com')
+    assert AnyUrl('https://b.com') != UrlWrapper('https://a.com/')
+
+    # `_BaseMultiHostUrl`: same delegation.
+    dsn = PostgresDsn('postgres://user:pass@localhost:5432/app')
+    assert dsn == UrlWrapper('postgres://user:pass@localhost:5432/app')
+    assert UrlWrapper('postgres://user:pass@localhost:5432/app') == dsn
+
+    # Types with no opinion of their own are still unequal (identity fallback).
+    assert AnyUrl('https://a.com') != 'https://a.com'
+    assert AnyUrl('https://a.com') != 5
 
 
 def test_max_length_base_url() -> None:
