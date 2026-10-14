@@ -7,7 +7,8 @@
 
 String[] distributions = [
 			'debian:trixie',
-			'ubuntu:resolute',
+			// 'ubuntu:resolute', // Disabled: python3-pydantic-core is not built for Ubuntu yet.
+			//                  // Re-enable once pydantic-core is published for resolute.
 ]
 
 String[] architectures = [] // inferred from debian/control: 'any' -> amd64 + arm64
