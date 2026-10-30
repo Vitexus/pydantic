@@ -1,5 +1,6 @@
-pydantic (2.14.0~a0+dev-1.11~trixie) UNRELEASED; urgency=medium
+pydantic (2.14.1-1) UNRELEASED; urgency=medium
 
+  [ Debian Packager ]
   * Adjusted Debian 13 packaging strategy: pydantic-core source incompatibility
     - pydantic-core Rust code requires features from rustc 1.90+ (if let expressions).
     - Debian 13 trixie provides only rustc 1.85.0.
@@ -10,7 +11,14 @@ pydantic (2.14.0~a0+dev-1.11~trixie) UNRELEASED; urgency=medium
     - Reverted to building only python3-pydantic (pure Python layer).
     - Users must install python3-pydantic-core separately from distro repos.
 
- -- Debian Packager <jenkins@vyvojar.spoje.net>  Fri, 03 May 2026 02:00:00 +0200
+  [ CyberVitexus ]
+  * New upstream release 2.14.1 (source already merged). The previous
+    changelog still said 2.14.0~a0+dev, so Jenkins published an old-
+    numbered build that conflicts with python3-pydantic-core 2.50.1
+    (Breaks python3-pydantic << 2.14.1) and made pydantic uninstallable
+    from repo.vitexsoftware.com.
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Fri, 30 Oct 2026 12:04:32 +0100
 
 pydantic (2.14.0~a0+dev-1.10~trixie) UNRELEASED; urgency=medium
 
